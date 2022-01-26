@@ -205,6 +205,9 @@ module type HISTOGRAM = sig
   val time : t -> (unit -> float) -> (unit -> 'a Lwt.t) -> 'a Lwt.t
   (** [time t gettime f] calls [gettime ()] before and after executing [f ()] and
       observes the difference. *)
+
+  val buckets : t -> int list
+  (** [buckets t] returns counts collected for buckets of the Histogram. *)
 end
 
 module Histogram (Buckets : sig val spec : Histogram_spec.t end) : HISTOGRAM
