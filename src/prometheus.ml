@@ -311,6 +311,7 @@ module type HISTOGRAM = sig
   include METRIC
   val observe : t -> float -> unit
   val time : t -> (unit -> float) -> (unit -> 'a Lwt.t) -> 'a Lwt.t
+  val buckets : t -> int list
 end
 
 let bucket_label = LabelName.v "le"
@@ -319,13 +320,13 @@ module Histogram (Buckets : BUCKETS) = struct
   module Child = struct
     type t = {
       upper_bounds : Histogram_spec.t;
-      counts : float array;
+      counts : int array;
       mutable sum : float;
     }
 
     let create () =
       let count = Array.length Buckets.spec in
-      let counts = Array.make count 0. in
+      let counts = Array.make count 0 in
       { upper_bounds = Buckets.spec; counts; sum = 0. }
 
     let values t =
@@ -336,7 +337,7 @@ module Histogram (Buckets : BUCKETS) = struct
           Sample_set.sample ~ext:"_count" val_acc ::
           acc
         else
-          let val_acc = t.counts.(index) +. val_acc in
+          let val_acc = float_of_int t.counts.(index) +. val_acc in
           let bucket = (bucket_label, t.upper_bounds.(index)) in
           let acc = Sample_set.sample ~ext:"_bucket" val_acc ~bucket :: acc in
           fold val_acc acc (index + 1)
@@ -355,7 +356,7 @@ module Histogram (Buckets : BUCKETS) = struct
   let observe t v =
     let open Child in
     let index = Histogram_spec.index t.upper_bounds v in
-    t.counts.(index) <- t.counts.(index) +. 1.;
+    t.counts.(index) <- t.counts.(index) + 1;
     t.sum <- t.sum +. v
 
   let time t gettimeofday fn =
@@ -366,6 +367,8 @@ module Histogram (Buckets : BUCKETS) = struct
          observe t (finish -. start);
          Lwt.return_unit
       )
+  
+  let buckets t = Array.to_list Child.(t.counts)
 end
 
 module DefaultHistogram = Histogram (
